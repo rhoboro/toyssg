@@ -7,8 +7,8 @@
 <ul class="post-list">
     {% for post in posts %}
     <li>
-        <span>{{ post.published_at }}</span>
-        <a href="posts/{{ post.file_name }}.html">{{ post.title }}</a>
+        <span>{{ post.meta.published_at }}</span>
+        <a href="posts/{{ post.file_name }}.html">{{ post.meta.title }}</a>
     </li>
     {% endfor %}
 </ul>

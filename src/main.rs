@@ -1,118 +1,159 @@
-use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
-
 use pulldown_cmark::{Options, Parser, html};
 use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, fs, path::Path};
 use tera::{Context, Tera};
 use walkdir::WalkDir;
 
-#[derive(Debug, Deserialize)]
-struct PageMeta {
-    title: String,
-    slug: String,
-}
-
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct PostMeta {
     title: String,
+    #[serde(default)] // page の場合は空になるため
     published_at: String,
     slug: String,
+    #[serde(default)]
     tags: String,
 }
 
-#[derive(Debug, Serialize, Clone)]
-struct PostSummary {
-    title: String,
-    published_at: String,
+#[derive(Debug, Serialize)]
+struct PostEntry {
+    meta: PostMeta,
     file_name: String,
+    content: String,
 }
 
+#[derive(Serialize)]
+struct PostContext<'a> {
+    title: &'a str,
+    published_at: &'a str,
+    tags: &'a str,
+    html_content: String, // 変換後のHTML
+    rel_path: &'a str,
+}
+
+impl<'a> PostContext<'a> {
+    fn new(post: &'a PostEntry, html_content: String, rel_path: &'a str) -> Self {
+        Self {
+            title: &post.meta.title,
+            published_at: &post.meta.published_at,
+            tags: &post.meta.tags,
+            html_content,
+            rel_path,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct IndexContext<'a> {
+    posts: &'a [PostEntry],
+    rel_path: &'a str,
+}
+
+impl<'a> IndexContext<'a> {
+    fn new(posts: &'a [PostEntry]) -> Self {
+        Self {
+            posts,
+            rel_path: "./",
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct TagContext<'a> {
+    tag_name: &'a str,
+    posts: Vec<&'a PostEntry>,
+    rel_path: &'a str,
+}
+
+impl<'a> TagContext<'a> {
+    fn new(name: &'a str, posts: Vec<&'a PostEntry>) -> Self {
+        Self {
+            tag_name: name,
+            posts,
+            rel_path: "../",
+        }
+    }
+}
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let tera = Tera::new("templates/**/*.html").expect("Template parsing error");
-    let mut all_posts = Vec::new();
-    let mut tags_map: HashMap<String, Vec<PostSummary>> = HashMap::new();
+    let tera = Tera::new("templates/**/*.html")?;
+    prepare_dist()?;
 
-    fs::create_dir_all("dist/posts")?;
-    fs::create_dir_all("dist/tags")?;
-
-    // pages
     if Path::new("pages").exists() {
         for entry in WalkDir::new("pages").into_iter().filter_map(|e| e.ok()) {
             if entry.path().extension().is_some_and(|s| s == "md") {
-                let raw = fs::read_to_string(entry.path())?;
-                let parts: Vec<&str> = raw.splitn(3, "---").collect();
-                if parts.len() < 3 {
-                    continue;
-                }
-
-                let meta: PageMeta = serde_yaml::from_str(parts[1])?;
-                let html_body = render_markdown(parts[2]);
-
-                let mut ctx = Context::new();
-                ctx.insert("rel_path", "./");
-                ctx.insert("title", &meta.title);
-                ctx.insert("content", &html_body);
-                ctx.insert("published_at", "");
-
-                let rendered = tera.render("post.html", &ctx)?;
-                fs::write(format!("dist/{}.html", meta.slug), rendered)?;
+                let post = load_post(entry.path())?;
+                render_single_file(&tera, &post, "dist", "./")?;
             }
         }
     }
 
-    // posts
+    let mut posts = Vec::new();
     for entry in WalkDir::new("posts").into_iter().filter_map(|e| e.ok()) {
         if entry.path().extension().is_some_and(|s| s == "md") {
-            let raw = fs::read_to_string(entry.path())?;
-            let parts: Vec<&str> = raw.splitn(3, "---").collect();
-            if parts.len() < 3 {
-                continue;
-            }
+            posts.push(load_post(entry.path())?);
+        }
+    }
+    posts.sort_by(|a, b| b.meta.published_at.cmp(&a.meta.published_at));
 
-            let meta: PostMeta = serde_yaml::from_str(parts[1])?;
-            let file_name = format!("{}-{}", meta.published_at, meta.slug);
-            let html_body = render_markdown(parts[2]);
+    render_blog_collection(&tera, &posts)?;
+    Ok(())
+}
 
-            let summary = PostSummary {
-                title: meta.title.clone(),
-                published_at: meta.published_at.clone(),
-                file_name: file_name.clone(),
-            };
+fn load_post(path: &Path) -> Result<PostEntry, Box<dyn std::error::Error>> {
+    let raw = fs::read_to_string(path)?;
+    let parts: Vec<&str> = raw.splitn(3, "---").collect();
+    let meta: PostMeta = serde_yaml::from_str(parts[1])?;
 
-            let mut post_ctx = Context::new();
-            post_ctx.insert("rel_path", "../");
-            post_ctx.insert("title", &meta.title);
-            post_ctx.insert("published_at", &meta.published_at);
-            post_ctx.insert("tags", &meta.tags);
-            post_ctx.insert("content", &html_body);
-            let rendered = tera.render("post.html", &post_ctx)?;
-            fs::write(format!("dist/posts/{}.html", file_name), rendered)?;
+    // slug があればそれを使う。日付がある場合は日付を接頭辞にする
+    let file_name = if meta.published_at.is_empty() {
+        meta.slug.clone()
+    } else {
+        format!("{}-{}", meta.published_at, meta.slug)
+    };
 
-            all_posts.push(summary.clone());
-            for tag in meta.tags.split(",") {
-                tags_map
-                    .entry(tag.trim().to_string())
-                    .or_default()
-                    .push(summary.clone());
+    Ok(PostEntry {
+        file_name,
+        content: parts[2].to_string(),
+        meta,
+    })
+}
+
+fn render_single_file(
+    tera: &Tera,
+    post: &PostEntry,
+    out_dir: &str,
+    rel_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let html_content = render_markdown(&post.content);
+    let ctx = Context::from_serialize(PostContext::new(post, html_content, rel_path))?;
+    let rendered = tera.render("post.html", &ctx)?;
+    fs::write(format!("{}/{}.html", out_dir, post.file_name), rendered)?;
+    Ok(())
+}
+
+fn render_blog_collection(
+    tera: &Tera,
+    posts: &[PostEntry],
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut tags_map: HashMap<&str, Vec<&PostEntry>> = HashMap::new();
+
+    for post in posts {
+        render_single_file(tera, post, "dist/posts", "../")?;
+
+        for tag in post.meta.tags.split(',') {
+            let t = tag.trim();
+            if !t.is_empty() {
+                tags_map.entry(t).or_default().push(post);
             }
         }
     }
 
-    // index
-    all_posts.sort_by(|a, b| b.published_at.cmp(&a.published_at));
-    let mut idx_ctx = Context::new();
-    idx_ctx.insert("rel_path", "./");
-    idx_ctx.insert("posts", &all_posts);
+    // Index
+    let idx_ctx = Context::from_serialize(IndexContext::new(posts))?;
     fs::write("dist/index.html", tera.render("index.html", &idx_ctx)?)?;
 
-    // tag
-    for (tag, mut tag_posts) in tags_map {
-        tag_posts.sort_by(|a, b| b.published_at.cmp(&a.published_at));
-        let mut t_ctx = Context::new();
-        t_ctx.insert("rel_path", "../");
-        t_ctx.insert("tag_name", &tag);
-        t_ctx.insert("posts", &tag_posts);
+    // Tags
+    for (tag, tag_posts) in tags_map {
+        let t_ctx = Context::from_serialize(TagContext::new(tag, tag_posts))?;
         fs::write(
             format!("dist/tags/{}.html", tag),
             tera.render("tag.html", &t_ctx)?,
@@ -122,16 +163,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if Path::new("static/style.css").exists() {
         fs::copy("static/style.css", "dist/style.css")?;
     }
-
     Ok(())
 }
 
 fn render_markdown(input: &str) -> String {
     let mut options = Options::empty();
-    options
-        .insert(Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS);
+    options.insert(
+        Options::ENABLE_TABLES
+            | Options::ENABLE_STRIKETHROUGH
+            | Options::ENABLE_TASKLISTS
+            | Options::ENABLE_FOOTNOTES,
+    );
     let parser = Parser::new_ext(input, options);
     let mut html_output = String::new();
     html::push_html(&mut html_output, parser);
     html_output
+}
+
+fn prepare_dist() -> Result<(), std::io::Error> {
+    let _ = fs::remove_dir_all("dist");
+    fs::create_dir_all("dist/posts")?;
+    fs::create_dir_all("dist/tags")?;
+    Ok(())
 }
