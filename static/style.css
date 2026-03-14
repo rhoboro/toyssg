@@ -1,0 +1,69 @@
+:root {
+    --bg: #fff;
+    --text: #333;
+    --accent: #0070f3;
+}
+
+body {
+    max-width: 680px;
+    margin: 40px auto;
+    padding: 0 20px;
+    line-height: 1.6;
+    font-family: sans-serif;
+    color: var(--text);
+}
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+nav {
+    margin-bottom: 3rem;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 1rem;
+}
+
+.tags {
+    margin-top: 2rem;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+pre {
+    border-radius: 4px;
+    padding: 1rem;
+    overflow-x: auto;
+}
+
+.post-list {
+    list-style: none;
+    padding: 0;
+}
+
+.post-list li {
+    margin-bottom: 1rem;
+    display: flex;
+    gap: 1rem;
+}
+
+.post-list span {
+    color: #999;
+    font-family: monospace;
+}
+
+.content img {
+    /* 親要素（max-width: 680px）からはみ出さないようにする */
+    max-width: 100%;
+
+    /* 元の画像が小さい場合に無理やり引き伸ばさない */
+    height: auto;
+
+    /* 中央寄せにする（お好みで） */
+    display: block;
+    margin: 2rem auto;
+
+    /* 少しおしゃれにするなら角を丸める */
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}

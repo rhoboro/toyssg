@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tag: {{ tag_name }}</title>
+    <link rel="stylesheet" href="{{ rel_path }}style.css">
+    <nav>
+        <a href="/">Home</a> |
+        <a href="{{ rel_path }}about.html">About</a>
+    </nav>
+    <hr>
+</head>
+<body>
+<header>
+    <a href="/">← Home</a>
+    <h1>Tag: {{ tag_name }}</h1>
+</header>
+
+<ul class="post-list">
+    {% for post in posts %}
+    <li>
+        <span>{{ post.published_at }}</span>
+        <a href="../{{ post.file_name }}.html">{{ post.title }}</a>
+    </li>
+    {% endfor %}
+</ul>
+</body>
+</html>

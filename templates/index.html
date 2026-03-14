@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>My Micro Blog</title>
+    <link rel="stylesheet" href="{{ rel_path }}style.css">
+    <nav>
+        <a href="/">Home</a> |
+        <a href="{{ rel_path }}about.html">About</a>
+    </nav>
+    <hr>
+</head>
+<body>
+<h1>Articles</h1>
+<ul class="post-list">
+    {% for post in posts %}
+    <li>
+        <span>{{ post.published_at }}</span>
+        <a href="posts/{{ post.file_name }}.html">{{ post.title }}</a>
+    </li>
+    {% endfor %}
+</ul>
+</body>
+</html>
