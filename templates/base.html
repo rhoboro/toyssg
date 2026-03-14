@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{% endblock title %} | My Micro Blog</title>
+    <link rel="stylesheet" href="{{ rel_path }}style.css">
+    {% block head %}{% endblock head %}
+</head>
+<body>
+<header>
+    <nav>
+        <a href="{{ rel_path }}index.html">Home</a> |
+        <a href="{{ rel_path }}about.html">About</a>
+    </nav>
+    <hr>
+</header>
+
+<main>
+    {% block content %}{% endblock content %}
+</main>
+
+<footer>
+    <p><small>&copy; 2026 rhoboro's Micro Blog</small></p>
+</footer>
+</body>
+</html>

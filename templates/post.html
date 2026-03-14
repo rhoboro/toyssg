@@ -1,14 +1,12 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ title }}</title>
-    <link rel="stylesheet" href="{{ rel_path }}style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-</head>
-<body>
-<nav><a href="/">Home</a> | <a href="{{ rel_path }}about.html">About</a></nav>
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock title %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+{% endblock head %}
+
+{% block content %}
 <article>
     <h1>{{ title }}</h1>
     {% if published_at %}
@@ -16,14 +14,21 @@
         <time>{{ published_at }}</time>
     </p>
     {% endif %}
-    <div class="content">{{ content | safe }}</div>
+
+    <div class="content">
+        {{ content | safe }}
+    </div>
+
     {% if tags %}
     <div class="tags">
-        Tags: {% for t in tags | split(pat=",") %}<a href="/tags/{{ t | trim }}.html">#{{ t | trim }}</a> {% endfor %}
+        Tags:
+        {% for t in tags | split(pat=",") %}
+        <a href="{{ rel_path }}tags/{{ t | trim }}.html">#{{ t | trim }}</a>
+        {% endfor %}
     </div>
     {% endif %}
 </article>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
-</body>
-</html>
+{% endblock content %}

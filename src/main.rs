@@ -1,10 +1,17 @@
-use pulldown_cmark::{Options, Parser, html};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+
+use pulldown_cmark::{Options, Parser, html};
+use serde::{Deserialize, Serialize};
 use tera::{Context, Tera};
 use walkdir::WalkDir;
+
+#[derive(Debug, Deserialize)]
+struct PageMeta {
+    title: String,
+    slug: String,
+}
 
 #[derive(Debug, Deserialize)]
 struct PostMeta {
@@ -12,12 +19,6 @@ struct PostMeta {
     published_at: String,
     slug: String,
     tags: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct PageMeta {
-    title: String,
-    slug: String,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -35,7 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all("dist/posts")?;
     fs::create_dir_all("dist/tags")?;
 
-    // --- 1. 固定ページ (pages/) の処理 ---
+    // pages
     if Path::new("pages").exists() {
         for entry in WalkDir::new("pages").into_iter().filter_map(|e| e.ok()) {
             if entry.path().extension().is_some_and(|s| s == "md") {
@@ -60,7 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // --- 2. ブログ記事 (posts/) の処理 ---
+    // posts
     for entry in WalkDir::new("posts").into_iter().filter_map(|e| e.ok()) {
         if entry.path().extension().is_some_and(|s| s == "md") {
             let raw = fs::read_to_string(entry.path())?;
@@ -79,7 +80,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 file_name: file_name.clone(),
             };
 
-            // 記事詳細の生成
             let mut post_ctx = Context::new();
             post_ctx.insert("rel_path", "../");
             post_ctx.insert("title", &meta.title);
@@ -89,9 +89,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let rendered = tera.render("post.html", &post_ctx)?;
             fs::write(format!("dist/posts/{}.html", file_name), rendered)?;
 
-            // データの収集
             all_posts.push(summary.clone());
-            for tag in meta.tags.split(',') {
+            for tag in meta.tags.split(",") {
                 tags_map
                     .entry(tag.trim().to_string())
                     .or_default()
@@ -100,13 +99,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // --- 3. 一覧ページ & タグページの生成 ---
+    // index
     all_posts.sort_by(|a, b| b.published_at.cmp(&a.published_at));
     let mut idx_ctx = Context::new();
     idx_ctx.insert("rel_path", "./");
     idx_ctx.insert("posts", &all_posts);
     fs::write("dist/index.html", tera.render("index.html", &idx_ctx)?)?;
 
+    // tag
     for (tag, mut tag_posts) in tags_map {
         tag_posts.sort_by(|a, b| b.published_at.cmp(&a.published_at));
         let mut t_ctx = Context::new();
@@ -119,12 +119,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
     }
 
-    // --- 4. アセットのコピー ---
     if Path::new("static/style.css").exists() {
         fs::copy("static/style.css", "dist/style.css")?;
     }
 
-    println!("Build successful!");
     Ok(())
 }
 
