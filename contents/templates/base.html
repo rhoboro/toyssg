@@ -3,15 +3,19 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}{% endblock title %} | rhoboro Micro Blog</title>
+    <title>{% block title %}{% endblock title %} — rhoboro's microblog</title>
     <link rel="stylesheet" href="{{ rel_path }}style.css">
     {% block head %}{% endblock head %}
 </head>
 <body>
 <header>
-    <nav>
-        <a href="{{ rel_path }}index.html">Home</a> |
-        <a href="{{ rel_path }}about.html">About</a>
+    <nav class="site-nav">
+        <div class="site-title">
+            <a href="{{ rel_path }}index.html">rhoboro's microblog</a>
+        </div>
+        <div class="nav-links">
+            <a href="{{ rel_path }}about.html">About</a>
+        </div>
     </nav>
 </header>
 
@@ -20,7 +24,7 @@
 </main>
 
 <footer>
-    <p><small>&copy; 2026 rhoboro's Micro Blog</small></p>
+    <p><small>&copy; 2026 rhoboro's microblog</small></p>
 </footer>
 </body>
 </html>
