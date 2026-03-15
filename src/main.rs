@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::Path};
 use tera::{Context, Tera};
 
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
 #[derive(Debug, Serialize, Deserialize)]
 struct PostMeta {
     title: String,
@@ -80,7 +82,8 @@ impl<'a> TagContext<'a> {
         }
     }
 }
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+
+fn main() -> Result<()> {
     let tera = Tera::new("contents/templates/**/*.html")?;
     prepare_dist()?;
 
@@ -98,12 +101,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         posts.push(load_post(post.as_path())?);
     }
     posts.sort_by(|a, b| b.meta.published_at.cmp(&a.meta.published_at));
-
     render_blog_collection(&tera, &posts)?;
+
     Ok(())
 }
 
-fn load_post(path: &Path) -> Result<PostEntry, Box<dyn std::error::Error>> {
+fn load_post(path: &Path) -> Result<PostEntry> {
     let raw = fs::read_to_string(path)?;
     let parts: Vec<&str> = raw.splitn(3, "---").collect();
     let meta: PostMeta = serde_yaml::from_str(parts[1])?;
@@ -122,12 +125,7 @@ fn load_post(path: &Path) -> Result<PostEntry, Box<dyn std::error::Error>> {
     })
 }
 
-fn render_single_file(
-    tera: &Tera,
-    post: &PostEntry,
-    out_dir: &str,
-    rel_path: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn render_single_file(tera: &Tera, post: &PostEntry, out_dir: &str, rel_path: &str) -> Result<()> {
     let html_content = render_markdown(&post.content);
     let ctx = Context::from_serialize(PostContext::new(post, html_content, rel_path))?;
     let rendered = tera.render("post.html", &ctx)?;
@@ -135,10 +133,7 @@ fn render_single_file(
     Ok(())
 }
 
-fn render_blog_collection(
-    tera: &Tera,
-    posts: &[PostEntry],
-) -> Result<(), Box<dyn std::error::Error>> {
+fn render_blog_collection(tera: &Tera, posts: &[PostEntry]) -> Result<()> {
     let mut tags_map: HashMap<&str, Vec<&PostEntry>> = HashMap::new();
 
     for post in posts {
@@ -185,14 +180,14 @@ fn render_markdown(input: &str) -> String {
     html_output
 }
 
-fn prepare_dist() -> Result<(), std::io::Error> {
+fn prepare_dist() -> Result<()> {
     let _ = fs::remove_dir_all("dist");
     fs::create_dir_all("dist/posts")?;
     fs::create_dir_all("dist/tags")?;
     Ok(())
 }
 
-fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
     fs::create_dir_all(&dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
@@ -206,7 +201,7 @@ fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result
     Ok(())
 }
 
-fn collect_md_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) -> std::io::Result<()> {
+fn collect_md_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) -> Result<()> {
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
             let path = entry?.path();
