@@ -1,0 +1,11 @@
+pub const TAG_BODY: &str = "#Body";
+pub const TAG_CODE_BLOCK: &str = "#CodeBlock";
+pub const TAG_DOC: &str = "#Doc";
+pub const TAG_ENTRY: &str = "#Entry";
+pub const TAG_HEADER: &str = "#Header";
+pub const TAG_IMAGE: &str = "#Image";
+pub const TAG_ITEM: &str = "#Item";
+pub const TAG_KEY: &str = "#Key";
+pub const TAG_LIST: &str = "#List";
+pub const TAG_P: &str = "#P";
+pub const TAG_VALUE: &str = "#Value";
