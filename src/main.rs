@@ -74,11 +74,14 @@ impl<'a> TagContext<'a> {
     }
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let tera = Tera::new("templates/**/*.html")?;
+    let tera = Tera::new("contents/templates/**/*.html")?;
     prepare_dist()?;
 
-    if Path::new("pages").exists() {
-        for entry in WalkDir::new("pages").into_iter().filter_map(|e| e.ok()) {
+    if Path::new("contents/pages").exists() {
+        for entry in WalkDir::new("contents/pages")
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
             if entry.path().extension().is_some_and(|s| s == "md") {
                 let post = load_post(entry.path())?;
                 render_single_file(&tera, &post, "dist", "./")?;
@@ -87,7 +90,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut posts = Vec::new();
-    for entry in WalkDir::new("posts").into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new("contents/posts")
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
         if entry.path().extension().is_some_and(|s| s == "md") {
             posts.push(load_post(entry.path())?);
         }
@@ -160,8 +166,8 @@ fn render_blog_collection(
         )?;
     }
 
-    if Path::new("static/style.css").exists() {
-        fs::copy("static/style.css", "dist/style.css")?;
+    if Path::new("contents/static/style.css").exists() {
+        fs::copy("contents/static/style.css", "dist/style.css")?;
     }
     Ok(())
 }
