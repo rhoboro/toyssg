@@ -2,6 +2,10 @@ use pulldown_cmark::{Options, Parser, html};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::Path};
 use tera::{Context, Tera};
+use toypeg::{
+    GrammarBuilder, MatchResult, Node, TPAny, TPChar, TPContext, TPExpr, TPMany, TPNode, TPNot,
+    TPOneMany, TPOr, TPRange, TPSeq, TPTag,
+};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -15,6 +19,18 @@ struct PostMeta {
     tags: String,
     #[serde(default)]
     description: String,
+}
+
+impl PostMeta {
+    fn from_map(mut map: HashMap<String, String>) -> Self {
+        Self {
+            title: map.remove("title").unwrap_or_default(),
+            published_at: map.remove("published_at").unwrap_or_default(),
+            slug: map.remove("slug").unwrap_or_default(),
+            tags: map.remove("tags").unwrap_or_default(),
+            description: map.remove("description").unwrap_or_default(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -108,10 +124,17 @@ fn main() -> Result<()> {
 
 fn load_post(path: &Path) -> Result<PostEntry> {
     let raw = fs::read_to_string(path)?;
-    let parts: Vec<&str> = raw.splitn(3, "---").collect();
-    let meta: PostMeta = serde_yaml::from_str(parts[1])?;
 
-    // slug があればそれを使う。日付がある場合は日付を接頭辞にする
+    // toypeg でパースを実行
+    let ctx = parse_markdown_with_toypeg(&raw)?;
+
+    let mut meta_map = HashMap::new();
+    let mut content = String::new();
+
+    // ASTから情報を抽出
+    extract_content(&ctx.tree.borrow(), &mut meta_map, &mut content);
+
+    let meta = PostMeta::from_map(meta_map);
     let file_name = if meta.published_at.is_empty() {
         meta.slug.clone()
     } else {
@@ -120,7 +143,7 @@ fn load_post(path: &Path) -> Result<PostEntry> {
 
     Ok(PostEntry {
         file_name,
-        content: parts[2].to_string(),
+        content,
         meta,
     })
 }
@@ -213,4 +236,130 @@ fn collect_md_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) -> Result<(
         }
     }
     Ok(())
+}
+
+/// toypegを使ってMarkdownファイルを(フロントマター, 本文)に分解する
+fn parse_markdown_with_toypeg(input: &str) -> Result<TPContext> {
+    let builder = GrammarBuilder::new();
+    let g = builder.clone();
+
+    let grammar = builder
+        .insert_as_node(
+            "MARKDOWN",
+            TPSeq::builder()
+                .seq(g.reference("FRONT_MATTER"))
+                .seq(TPNode::new(
+                    TPMany::new(g.reference("ANY_CHAR")),
+                    TPTag::Tag("#Body"),
+                ))
+                .build(),
+            TPTag::Tag("#Doc"),
+        )
+        .insert_as_node(
+            "FRONT_MATTER",
+            TPSeq::builder()
+                .seq(TPChar::new("---"))
+                .seq(g.reference("NEWLINE"))
+                .seq(TPMany::new(g.reference("YAML_ENTRY")))
+                .seq(TPChar::new("---"))
+                .seq(g.reference("NEWLINE"))
+                .build(),
+            TPTag::Tag("#FrontMatter"),
+        )
+        .insert_as_node(
+            "YAML_ENTRY",
+            TPSeq::builder()
+                .seq(TPNode::new(g.reference("IDENTIFIER"), TPTag::Tag("#Key")))
+                .seq(TPChar::new(": "))
+                .seq(TPNode::new(g.reference("VALUE"), TPTag::Tag("#Value")))
+                .seq(g.reference("NEWLINE"))
+                .build(),
+            TPTag::Tag("#Entry"),
+        )
+        // 識別子：英数字とアンダースコア
+        .insert(
+            "IDENTIFIER",
+            TPOneMany::new(TPOr::new(
+                TPRange::new("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"),
+                TPRange::new("0123456789"),
+            )),
+        )
+        // 値：改行以外のすべての文字
+        .insert(
+            "VALUE",
+            TPMany::new(TPSeq::new(
+                TPNot::new(g.reference("NEWLINE")),
+                g.reference("ANY_CHAR"),
+            )),
+        )
+        .insert("ANY_CHAR", TPAny::new())
+        .insert("NEWLINE", TPOr::new(TPChar::new("\r\n"), TPChar::new("\n")))
+        .build();
+
+    let context = TPContext::new(input.to_owned());
+    let result = grammar.borrow().get("MARKDOWN").unwrap().matches(context);
+
+    match result? {
+        MatchResult::Success(c) => Ok(c),
+        MatchResult::Failure(f) => {
+            // 失敗した場所を表示するためのデバッグ用
+            panic!("Parse failed at offset: {:?}", f);
+        }
+    }
+}
+
+/// toypegのASTからメタデータと本文を抽出する
+fn extract_content(node: &Node, meta: &mut HashMap<String, String>, body: &mut String) {
+    match node.tag {
+        // YAMLのエントリ (#Entry) を見つけたら、その子の Key と Value を探す
+        TPTag::Tag("#Entry") => {
+            let mut key = String::new();
+            let mut value = String::new();
+
+            for child_rc in &node.nodes {
+                let child = child_rc.borrow();
+                // token が存在する場合のみ文字列を抽出
+                if let Some(ref token) = child.token {
+                    match child.tag {
+                        TPTag::Tag("#Key") => key = format!("{token}"),
+                        TPTag::Tag("#Value") => value = format!("{token}").trim().to_string(),
+                        _ => {}
+                    }
+                }
+            }
+            if !key.is_empty() {
+                meta.insert(key, value);
+            }
+        }
+        // 本文 (#Body) を見つけたら、その内容を String に格納
+        TPTag::Tag("#Body") => {
+            if let Some(ref token) = node.token {
+                *body = format!("{token}");
+            }
+        }
+        // それ以外のノード（#Root, #Doc, #FrontMatterなど）は子を再帰的に探索
+        _ => {
+            for child_rc in &node.nodes {
+                extract_content(&child_rc.borrow(), meta, body);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_extract_content() -> Result<()> {
+        let path = Path::new("contents/posts/2026/second.md");
+        let raw = fs::read_to_string(path)?;
+        let ctx = parse_markdown_with_toypeg(&raw)?;
+        let mut meta = HashMap::new();
+        let mut body = String::new();
+        extract_content(&ctx.tree.borrow(), &mut meta, &mut body);
+        println!("{meta:?}");
+        println!("{body:?}");
+        Ok(())
+    }
 }

@@ -4,7 +4,7 @@ published_at: 2026-03-14
 title: 初めてのブログ
 tags: rust
 slug: first
-description: 1つ目のブログです。
+description: 初めてのブログです。
 ---
 
 ここは導入の文章です。HTMLではこの上に title が大きく表示されます。
