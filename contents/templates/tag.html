@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}Tags{% endblock title %}
+{% block title %}Tags: {{ tag_name }}{% endblock title %}
+{% block og_type %}website{% endblock og_type %}
 
 {% block content %}
 <h1>Tag: {{ tag_name }}</h1>

@@ -4,6 +4,7 @@ published_at: 2026-03-15
 title: 2つめのブログ
 tags: rust,blog
 slug: second
+description: 2つ目のブログです。
 ---
 
 マイクロブログを作成中...

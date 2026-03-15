@@ -2,16 +2,17 @@ use pulldown_cmark::{Options, Parser, html};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::Path};
 use tera::{Context, Tera};
-use walkdir::WalkDir;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct PostMeta {
     title: String,
-    #[serde(default)] // page の場合は空になるため
+    #[serde(default)]
     published_at: String,
     slug: String,
     #[serde(default)]
     tags: String,
+    #[serde(default)]
+    description: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -24,6 +25,7 @@ struct PostEntry {
 #[derive(Serialize)]
 struct PostContext<'a> {
     title: &'a str,
+    description: &'a str,
     published_at: &'a str,
     tags: &'a str,
     html_content: String, // 変換後のHTML
@@ -34,6 +36,7 @@ impl<'a> PostContext<'a> {
     fn new(post: &'a PostEntry, html_content: String, rel_path: &'a str) -> Self {
         Self {
             title: &post.meta.title,
+            description: &post.meta.description,
             published_at: &post.meta.published_at,
             tags: &post.meta.tags,
             html_content,
@@ -44,6 +47,7 @@ impl<'a> PostContext<'a> {
 
 #[derive(Serialize)]
 struct IndexContext<'a> {
+    title: &'a str,
     posts: &'a [PostEntry],
     rel_path: &'a str,
 }
@@ -51,6 +55,7 @@ struct IndexContext<'a> {
 impl<'a> IndexContext<'a> {
     fn new(posts: &'a [PostEntry]) -> Self {
         Self {
+            title: "rhoboro's microblog",
             posts,
             rel_path: "./",
         }
@@ -59,6 +64,7 @@ impl<'a> IndexContext<'a> {
 
 #[derive(Serialize)]
 struct TagContext<'a> {
+    title: &'a str,
     tag_name: &'a str,
     posts: Vec<&'a PostEntry>,
     rel_path: &'a str,
@@ -67,6 +73,7 @@ struct TagContext<'a> {
 impl<'a> TagContext<'a> {
     fn new(name: &'a str, posts: Vec<&'a PostEntry>) -> Self {
         Self {
+            title: name,
             tag_name: name,
             posts,
             rel_path: "../",
@@ -77,26 +84,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tera = Tera::new("contents/templates/**/*.html")?;
     prepare_dist()?;
 
-    if Path::new("contents/pages").exists() {
-        for entry in WalkDir::new("contents/pages")
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            if entry.path().extension().is_some_and(|s| s == "md") {
-                let post = load_post(entry.path())?;
-                render_single_file(&tera, &post, "dist", "./")?;
-            }
-        }
+    let mut page_files = Vec::new();
+    collect_md_files(Path::new("contents/pages"), &mut page_files)?;
+    for page in page_files {
+        let post = load_post(page.as_path())?;
+        render_single_file(&tera, &post, "dist", "./")?;
     }
 
     let mut posts = Vec::new();
-    for entry in WalkDir::new("contents/posts")
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        if entry.path().extension().is_some_and(|s| s == "md") {
-            posts.push(load_post(entry.path())?);
-        }
+    let mut post_files = Vec::new();
+    collect_md_files(Path::new("contents/posts"), &mut post_files)?;
+    for post in post_files {
+        posts.push(load_post(post.as_path())?);
     }
     posts.sort_by(|a, b| b.meta.published_at.cmp(&a.meta.published_at));
 
@@ -202,6 +201,20 @@ fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result
             copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
         } else {
             fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
+}
+
+fn collect_md_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) -> std::io::Result<()> {
+    if dir.is_dir() {
+        for entry in fs::read_dir(dir)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                collect_md_files(&path, files)?;
+            } else if path.extension().is_some_and(|ext| ext == "md") {
+                files.push(path);
+            }
         }
     }
     Ok(())

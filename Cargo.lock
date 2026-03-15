@@ -357,7 +357,6 @@ dependencies = [
  "serde",
  "serde_yaml",
  "tera",
- "walkdir",
 ]
 
 [[package]]
