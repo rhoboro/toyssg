@@ -4,20 +4,20 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <title>{% block title %}{% endblock title %} — rhoboro's microblog</title>
-    <meta name="description" content="{{ description | default(value='rhoboro&#39;s microblog') }}">
+    <title>{{ title }} — rhoboro's microblog</title>
+    <meta name="description" content="{{ description }}">
 
     <meta property="og:site_name" content="rhoboro's microblog">
-    <meta property="og:title" content="{% block og_title %}{{ title }}{% endblock og_title %}">
-    <meta property="og:description" content="{{ description | default(value='rhoboro&#39;s microblog') }}">
-    <meta property="og:type" content="{% block og_type %}website{% endblock og_type %}">
+    <meta property="og:title" content="{{ title }}">
+    <meta property="og:description" content="{{ description }}">
+    <meta property="og:type" content="{{ og_type }}">
     <meta property="og:image" content="{{ rel_path }}images/ogp.png">
 
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="{% block twitter_title %}{{ title }}{% endblock twitter_title %}">
+    <meta name="twitter:title" content="{{ title }}">
 
     <link rel="stylesheet" href="{{ rel_path }}style.css">
-    {% block head %}{% endblock head %}
+    {{ extra_head }}
 </head>
 <body>
 <header>
@@ -32,7 +32,7 @@
 </header>
 
 <main>
-    {% block content %}{% endblock content %}
+    {{ content }}
 </main>
 
 <footer>

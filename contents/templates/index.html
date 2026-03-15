@@ -1,16 +1,4 @@
-{% extends "base.html" %}
-
-{% block title %}Articles{% endblock title %}
-{% block og_type %}articles{% endblock og_type %}
-
-{% block content %}
 <h1>Articles</h1>
 <ul class="post-list">
-    {% for post in posts %}
-    <li>
-        <span>{{ post.meta.published_at }}</span>
-        <a href="posts/{{ post.file_name }}.html">{{ post.meta.title }}</a>
-    </li>
-    {% endfor %}
+    {{ posts }}
 </ul>
-{% endblock content %}

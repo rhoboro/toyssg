@@ -1,7 +1,4 @@
-use pulldown_cmark::{Options, Parser, html};
-use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::Path};
-use tera::{Context, Tera};
 use toypeg::{
     GrammarBuilder, MatchResult, Node, TPAny, TPChar, TPContext, TPExpr, TPMany, TPNode, TPNot,
     TPOneMany, TPOr, TPRange, TPSeq, TPTag,
@@ -9,15 +6,12 @@ use toypeg::{
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 struct PostMeta {
     title: String,
-    #[serde(default)]
     published_at: String,
     slug: String,
-    #[serde(default)]
     tags: String,
-    #[serde(default)]
     description: String,
 }
 
@@ -33,83 +27,25 @@ impl PostMeta {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct PostEntry {
     meta: PostMeta,
     file_name: String,
-    content: String,
-}
-
-#[derive(Serialize)]
-struct PostContext<'a> {
-    title: &'a str,
-    description: &'a str,
-    published_at: &'a str,
-    tags: &'a str,
-    html_content: String, // 変換後のHTML
-    rel_path: &'a str,
-}
-
-impl<'a> PostContext<'a> {
-    fn new(post: &'a PostEntry, html_content: String, rel_path: &'a str) -> Self {
-        Self {
-            title: &post.meta.title,
-            description: &post.meta.description,
-            published_at: &post.meta.published_at,
-            tags: &post.meta.tags,
-            html_content,
-            rel_path,
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct IndexContext<'a> {
-    title: &'a str,
-    posts: &'a [PostEntry],
-    rel_path: &'a str,
-}
-
-impl<'a> IndexContext<'a> {
-    fn new(posts: &'a [PostEntry]) -> Self {
-        Self {
-            title: "rhoboro's microblog",
-            posts,
-            rel_path: "./",
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct TagContext<'a> {
-    title: &'a str,
-    tag_name: &'a str,
-    posts: Vec<&'a PostEntry>,
-    rel_path: &'a str,
-}
-
-impl<'a> TagContext<'a> {
-    fn new(name: &'a str, posts: Vec<&'a PostEntry>) -> Self {
-        Self {
-            title: name,
-            tag_name: name,
-            posts,
-            rel_path: "../",
-        }
-    }
+    content: String, // ここにはHTML変換後の文字列が入る
 }
 
 fn main() -> Result<()> {
-    let tera = Tera::new("contents/templates/**/*.html")?;
     prepare_dist()?;
 
+    // 1. 固定ページの処理
     let mut page_files = Vec::new();
     collect_md_files(Path::new("contents/pages"), &mut page_files)?;
     for page in page_files {
         let post = load_post(page.as_path())?;
-        render_single_file(&tera, &post, "dist", "./")?;
+        render_single_file(&post, "dist", "./")?;
     }
 
+    // 2. ブログ投稿の処理
     let mut posts = Vec::new();
     let mut post_files = Vec::new();
     collect_md_files(Path::new("contents/posts"), &mut post_files)?;
@@ -117,22 +53,24 @@ fn main() -> Result<()> {
         posts.push(load_post(post.as_path())?);
     }
     posts.sort_by(|a, b| b.meta.published_at.cmp(&a.meta.published_at));
-    render_blog_collection(&tera, &posts)?;
+    render_blog_collection(&posts)?;
 
     Ok(())
 }
 
 fn load_post(path: &Path) -> Result<PostEntry> {
     let raw = fs::read_to_string(path)?;
-
-    // toypeg でパースを実行
     let ctx = parse_markdown_with_toypeg(&raw)?;
+    let root = ctx.tree.borrow();
 
     let mut meta_map = HashMap::new();
-    let mut content = String::new();
+    let mut _dummy_body = String::new();
 
-    // ASTから情報を抽出
-    extract_content(&ctx.tree.borrow(), &mut meta_map, &mut content);
+    // メタデータの抽出
+    extract_content(&root, &mut meta_map, &mut _dummy_body);
+
+    // 本文のHTML変換 (ASTから直接生成)
+    let html_content = find_and_render_body(&root);
 
     let meta = PostMeta::from_map(meta_map);
     let file_name = if meta.published_at.is_empty() {
@@ -143,25 +81,67 @@ fn load_post(path: &Path) -> Result<PostEntry> {
 
     Ok(PostEntry {
         file_name,
-        content,
+        content: html_content,
         meta,
     })
 }
 
-fn render_single_file(tera: &Tera, post: &PostEntry, out_dir: &str, rel_path: &str) -> Result<()> {
-    let html_content = render_markdown(&post.content);
-    let ctx = Context::from_serialize(PostContext::new(post, html_content, rel_path))?;
-    let rendered = tera.render("post.html", &ctx)?;
-    fs::write(format!("{}/{}.html", out_dir, post.file_name), rendered)?;
+fn find_and_render_body(node: &Node) -> String {
+    if node.tag == TPTag::Tag("#Body") {
+        return ast_to_html(node);
+    }
+    for child in &node.nodes {
+        let res = find_and_render_body(&child.borrow());
+        if !res.is_empty() {
+            return res;
+        }
+    }
+    String::new()
+}
+
+fn render_single_file(post: &PostEntry, out_dir: &str, rel_path: &str) -> Result<()> {
+    // 1. まず記事パーツ (post.html) をレンダリング
+    let mut post_vars = HashMap::new();
+    post_vars.insert("title", post.meta.title.as_str());
+    post_vars.insert("published_at", post.meta.published_at.as_str());
+    post_vars.insert("html_content", post.content.as_str());
+
+    // タグのリンク HTML を Rust 側で組み立てる
+    let mut tags_html = String::new();
+    for t in post.meta.tags.split(',') {
+        let t = t.trim();
+        if !t.is_empty() {
+            tags_html.push_str(&format!(
+                r#"<a href="{}tags/{}.html">#{}</a> "#,
+                rel_path, t, t
+            ));
+        }
+    }
+    post_vars.insert("tags_html", tags_html.as_str());
+
+    let content_body = render_simple(Path::new("contents/templates/post.html"), &post_vars)?;
+
+    // 2. base.html に埋め込む
+    let mut base_vars = HashMap::new();
+    base_vars.insert("title", post.meta.title.as_str());
+    base_vars.insert("description", post.meta.description.as_str());
+    base_vars.insert("og_type", "article");
+    base_vars.insert("rel_path", rel_path);
+    base_vars.insert("content", content_body.as_str());
+    base_vars.insert("extra_head", r#"<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">"#);
+
+    let final_html = render_simple(Path::new("contents/templates/base.html"), &base_vars)?;
+
+    fs::write(format!("{}/{}.html", out_dir, post.file_name), final_html)?;
     Ok(())
 }
 
-fn render_blog_collection(tera: &Tera, posts: &[PostEntry]) -> Result<()> {
+fn render_blog_collection(posts: &[PostEntry]) -> Result<()> {
     let mut tags_map: HashMap<&str, Vec<&PostEntry>> = HashMap::new();
 
+    // 1. 各個別記事のレンダリング
     for post in posts {
-        render_single_file(tera, post, "dist/posts", "../")?;
-
+        render_single_file(post, "dist/posts", "../")?;
         for tag in post.meta.tags.split(',') {
             let t = tag.trim();
             if !t.is_empty() {
@@ -170,70 +150,64 @@ fn render_blog_collection(tera: &Tera, posts: &[PostEntry]) -> Result<()> {
         }
     }
 
-    // Index
-    let idx_ctx = Context::from_serialize(IndexContext::new(posts))?;
-    fs::write("dist/index.html", tera.render("index.html", &idx_ctx)?)?;
+    // 2. Index ページの生成
+    let mut list_html = String::new();
+    for post in posts {
+        list_html.push_str(&format!(
+            "<li><span>{}</span><a href='posts/{}.html'>{}</a></li>\n",
+            post.meta.published_at, post.file_name, post.meta.title
+        ));
+    }
 
-    // Tags
+    // パーツ (index.html) の作成
+    let mut idx_parts = HashMap::new();
+    idx_parts.insert("posts", list_html.as_str());
+    let index_body = render_simple(Path::new("contents/templates/index.html"), &idx_parts)?;
+
+    // 全体 (base.html) への埋め込み
+    let mut idx_base = HashMap::new();
+    idx_base.insert("title", "Articles");
+    idx_base.insert("description", "rhoboro's microblog記事一覧");
+    idx_base.insert("og_type", "website");
+    idx_base.insert("rel_path", "./");
+    idx_base.insert("content", index_body.as_str());
+    idx_base.insert("extra_head", "");
+
+    let final_index = render_simple(Path::new("contents/templates/base.html"), &idx_base)?;
+    fs::write("dist/index.html", final_index)?;
+
+    // 3. Tag ページの生成
     for (tag, tag_posts) in tags_map {
-        let t_ctx = Context::from_serialize(TagContext::new(tag, tag_posts))?;
-        fs::write(
-            format!("dist/tags/{}.html", tag),
-            tera.render("tag.html", &t_ctx)?,
-        )?;
+        let mut t_list_html = String::new();
+        for p in tag_posts {
+            t_list_html.push_str(&format!(
+                "<li><span>{}</span><a href='../posts/{}.html'>{}</a></li>\n",
+                p.meta.published_at, p.file_name, p.meta.title
+            ));
+        }
+
+        // パーツ (tag.html) の作成
+        let mut t_parts = HashMap::new();
+        t_parts.insert("posts", t_list_html.as_str());
+        t_parts.insert("tag_name", tag);
+        let tag_body = render_simple(Path::new("contents/templates/tag.html"), &t_parts)?;
+
+        // 全体 (base.html) への埋め込み
+        let desc = format!("Tag: {} の記事一覧", tag);
+        let mut t_base = HashMap::new();
+        t_base.insert("title", tag); // タグ名をタイトルに
+        t_base.insert("description", &desc);
+        t_base.insert("og_type", "website");
+        t_base.insert("rel_path", "../");
+        t_base.insert("content", tag_body.as_str());
+        t_base.insert("extra_head", "");
+
+        let final_tag = render_simple(Path::new("contents/templates/base.html"), &t_base)?;
+        fs::write(format!("dist/tags/{}.html", tag), final_tag)?;
     }
 
     if Path::new("contents/static").exists() {
         copy_dir_all("contents/static", "dist")?;
-    }
-    Ok(())
-}
-
-fn render_markdown(input: &str) -> String {
-    let mut options = Options::empty();
-    options.insert(
-        Options::ENABLE_TABLES
-            | Options::ENABLE_STRIKETHROUGH
-            | Options::ENABLE_TASKLISTS
-            | Options::ENABLE_FOOTNOTES,
-    );
-    let parser = Parser::new_ext(input, options);
-    let mut html_output = String::new();
-    html::push_html(&mut html_output, parser);
-    html_output
-}
-
-fn prepare_dist() -> Result<()> {
-    let _ = fs::remove_dir_all("dist");
-    fs::create_dir_all("dist/posts")?;
-    fs::create_dir_all("dist/tags")?;
-    Ok(())
-}
-
-fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
-    fs::create_dir_all(&dst)?;
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        if ty.is_dir() {
-            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        } else {
-            fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        }
-    }
-    Ok(())
-}
-
-fn collect_md_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) -> Result<()> {
-    if dir.is_dir() {
-        for entry in fs::read_dir(dir)? {
-            let path = entry?.path();
-            if path.is_dir() {
-                collect_md_files(&path, files)?;
-            } else if path.extension().is_some_and(|ext| ext == "md") {
-                files.push(path);
-            }
-        }
     }
     Ok(())
 }
@@ -249,7 +223,7 @@ fn parse_markdown_with_toypeg(input: &str) -> Result<TPContext> {
             TPSeq::builder()
                 .seq(g.reference("FRONT_MATTER"))
                 .seq(TPNode::new(
-                    TPMany::new(g.reference("ANY_CHAR")),
+                    TPMany::new(g.reference("BLOCK_WRAPPER")),
                     TPTag::Tag("#Body"),
                 ))
                 .build(),
@@ -276,15 +250,82 @@ fn parse_markdown_with_toypeg(input: &str) -> Result<TPContext> {
                 .build(),
             TPTag::Tag("#Entry"),
         )
-        // 識別子：英数字とアンダースコア
+        .insert(
+            "BLOCK_WRAPPER",
+            TPSeq::builder()
+                .seq(TPMany::new(g.reference("NEWLINE")))
+                .seq(g.reference("BLOCK"))
+                .seq(TPMany::new(g.reference("NEWLINE")))
+                .build(),
+        )
+        .insert(
+            "BLOCK",
+            TPOr::builder()
+                .or(g.reference("HEADER"))
+                .or(g.reference("CODE_BLOCK"))
+                .or(g.reference("PARAGRAPH"))
+                .build()
+                .unwrap(),
+        )
+        .insert_as_node(
+            "HEADER",
+            TPSeq::builder()
+                .seq(TPNode::new(
+                    TPOneMany::new(TPChar::new("#")),
+                    TPTag::Tag("#Level"),
+                ))
+                .seq(TPChar::new(" "))
+                .seq(TPNode::new(g.reference("VALUE"), TPTag::Tag("#Text")))
+                .seq(g.reference("NEWLINE"))
+                .build(),
+            TPTag::Tag("#Header"),
+        )
+        .insert_as_node(
+            "CODE_BLOCK",
+            TPSeq::builder()
+                .seq(TPChar::new("```"))
+                .seq(TPNode::new(g.reference("VALUE"), TPTag::Tag("#Lang")))
+                .seq(g.reference("NEWLINE"))
+                .seq(TPNode::new(
+                    TPMany::new(TPSeq::new(
+                        TPNot::new(TPChar::new("```")),
+                        g.reference("ANY_CHAR"),
+                    )),
+                    TPTag::Tag("#Code"),
+                ))
+                .seq(TPChar::new("```"))
+                .seq(g.reference("NEWLINE"))
+                .build(),
+            TPTag::Tag("#CodeBlock"),
+        )
+        .insert_as_node(
+            "PARAGRAPH",
+            TPOneMany::new(g.reference("PLAIN_LINE")),
+            TPTag::Tag("#P"),
+        )
+        .insert_as_node(
+            "PLAIN_LINE",
+            TPSeq::builder()
+                .seq(TPNot::new(
+                    TPOr::builder()
+                        .or(g.reference("NEWLINE"))
+                        .or(TPChar::new("#"))
+                        .or(TPChar::new("```"))
+                        .build()
+                        .unwrap(),
+                ))
+                .seq(g.reference("VALUE"))
+                .seq(g.reference("NEWLINE"))
+                .build(),
+            TPTag::Tag("#Line"),
+        )
         .insert(
             "IDENTIFIER",
             TPOneMany::new(TPOr::new(
-                TPRange::new("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"),
-                TPRange::new("0123456789"),
+                TPRange::new("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"),
+                TPRange::new("_-"),
             )),
         )
-        // 値：改行以外のすべての文字
         .insert(
             "VALUE",
             TPMany::new(TPSeq::new(
@@ -301,24 +342,21 @@ fn parse_markdown_with_toypeg(input: &str) -> Result<TPContext> {
 
     match result? {
         MatchResult::Success(c) => Ok(c),
-        MatchResult::Failure(f) => {
-            // 失敗した場所を表示するためのデバッグ用
-            panic!("Parse failed at offset: {:?}", f);
-        }
+        MatchResult::Failure(f) => panic!(
+            "Parse failed at pos: {}\nNear: {:?}",
+            f.pos,
+            &f.text[f.pos..(f.pos + 40).min(f.text.len())]
+        ),
     }
 }
 
-/// toypegのASTからメタデータと本文を抽出する
 fn extract_content(node: &Node, meta: &mut HashMap<String, String>, body: &mut String) {
     match node.tag {
-        // YAMLのエントリ (#Entry) を見つけたら、その子の Key と Value を探す
         TPTag::Tag("#Entry") => {
             let mut key = String::new();
             let mut value = String::new();
-
             for child_rc in &node.nodes {
                 let child = child_rc.borrow();
-                // token が存在する場合のみ文字列を抽出
                 if let Some(ref token) = child.token {
                     match child.tag {
                         TPTag::Tag("#Key") => key = format!("{token}"),
@@ -331,19 +369,132 @@ fn extract_content(node: &Node, meta: &mut HashMap<String, String>, body: &mut S
                 meta.insert(key, value);
             }
         }
-        // 本文 (#Body) を見つけたら、その内容を String に格納
         TPTag::Tag("#Body") => {
             if let Some(ref token) = node.token {
                 *body = format!("{token}");
             }
         }
-        // それ以外のノード（#Root, #Doc, #FrontMatterなど）は子を再帰的に探索
         _ => {
             for child_rc in &node.nodes {
                 extract_content(&child_rc.borrow(), meta, body);
             }
         }
     }
+}
+
+fn ast_to_html(node: &Node) -> String {
+    match node.tag {
+        TPTag::Tag("#Header") => {
+            let mut level = 0;
+            let mut text = String::new();
+            for child_rc in &node.nodes {
+                let child = child_rc.borrow();
+                if child.tag == TPTag::Tag("#Level") {
+                    level = format!("{}", child.token.as_ref().unwrap()).len();
+                }
+                if child.tag == TPTag::Tag("#Text") {
+                    // 子ノード #Text の token だけを取得
+                    text = child
+                        .token
+                        .as_ref()
+                        .map(|t| format!("{t}"))
+                        .unwrap_or_default();
+                }
+            }
+            format!("<h{level}>{text}</h{level}>\n")
+        }
+        TPTag::Tag("#CodeBlock") => {
+            let mut lang = String::new();
+            let mut code = String::new();
+            for child_rc in &node.nodes {
+                let child = child_rc.borrow();
+                if child.tag == TPTag::Tag("#Lang") {
+                    lang = child
+                        .token
+                        .as_ref()
+                        .map(|t| format!("{t}"))
+                        .unwrap_or_default()
+                        .trim()
+                        .to_string();
+                }
+                if child.tag == TPTag::Tag("#Code") {
+                    code = child
+                        .token
+                        .as_ref()
+                        .map(|t| format!("{t}"))
+                        .unwrap_or_default();
+                }
+            }
+            format!("<pre><code class=\"language-{lang}\">{code}</code></pre>\n")
+        }
+        TPTag::Tag("#P") => {
+            let mut text = String::new();
+            for child_rc in &node.nodes {
+                let child = child_rc.borrow();
+                // 子ノード #Line の token だけを順番に結合する
+                if let Some(ref token) = child.token {
+                    text.push_str(&format!("{token}"));
+                }
+            }
+            let clean_text = text.trim();
+            if clean_text.is_empty() {
+                String::new()
+            } else {
+                format!("<p>{}</p>\n", clean_text.replace("\n", "<br>\n"))
+            }
+        }
+        // コンテナノードは再帰的に子を結合
+        _ => {
+            let mut html = String::new();
+            for child_rc in &node.nodes {
+                html.push_str(&ast_to_html(&child_rc.borrow()));
+            }
+            html
+        }
+    }
+}
+
+fn render_simple(template_path: &Path, vars: &HashMap<&str, &str>) -> Result<String> {
+    let mut html = fs::read_to_string(template_path)?;
+    for (key, value) in vars {
+        let pattern = format!("{{{{ {} }}}}", key);
+        html = html.replace(&pattern, value);
+    }
+    Ok(html)
+}
+
+fn prepare_dist() -> Result<()> {
+    let _ = fs::remove_dir_all("dist");
+    fs::create_dir_all("dist/posts")?;
+    fs::create_dir_all("dist/tags")?;
+    Ok(())
+}
+
+fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
+    fs::create_dir_all(&dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
+}
+
+fn collect_md_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) -> Result<()> {
+    if dir.is_dir() {
+        for entry in fs::read_dir(dir)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                collect_md_files(&path, files)?;
+            } else if path.extension().is_some_and(|ext| ext == "md") {
+                files.push(path);
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -1,35 +1,15 @@
-{% extends "base.html" %}
-
-{% block title %}{{ title }}{% endblock title %}
-{% block og_type %}article{% endblock og_type %}
-
-{% block head %}
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-{% endblock head %}
-
-{% block content %}
 <article>
     <h1>{{ title }}</h1>
-    {% if published_at %}
-    <p>
-        <time>{{ published_at }}</time>
-    </p>
-    {% endif %}
+    <p><time>{{ published_at }}</time></p>
 
     <div class="content">
-        {{ html_content | safe }}
+        {{ html_content }}
     </div>
 
-    {% if tags %}
     <div class="tags">
-        Tags:
-        {% for t in tags | split(pat=",") %}
-        <a href="{{ rel_path }}tags/{{ t | trim }}.html">#{{ t | trim }}</a>
-        {% endfor %}
+        Tags: {{ tags_html }}
     </div>
-    {% endif %}
 </article>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
-{% endblock content %}
