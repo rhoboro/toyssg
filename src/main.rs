@@ -101,10 +101,13 @@ fn find_and_render_body(node: &Node) -> String {
 
 fn render_single_file(post: &PostEntry, out_dir: &str, rel_path: &str) -> Result<()> {
     // 1. まず記事パーツ (post.html) をレンダリング
+    let (clean_body, footer) = process_footnotes(&post.content);
+    let final_content = format!("{}{}", clean_body, footer);
+
     let mut post_vars = HashMap::new();
     post_vars.insert("title", post.meta.title.as_str());
     post_vars.insert("published_at", post.meta.published_at.as_str());
-    post_vars.insert("html_content", post.content.as_str());
+    post_vars.insert("html_content", final_content.as_str());
 
     // タグのリンク HTML を Rust 側で組み立てる
     let mut tags_html = String::new();
@@ -229,6 +232,7 @@ fn parse_markdown_with_toypeg(input: &str) -> Result<TPContext> {
                 .build(),
             TPTag::Tag("#Doc"),
         )
+        // ... (FRONT_MATTER, YAML_ENTRY は前回同様) ...
         .insert_as_node(
             "FRONT_MATTER",
             TPSeq::builder()
@@ -258,14 +262,49 @@ fn parse_markdown_with_toypeg(input: &str) -> Result<TPContext> {
                 .seq(TPMany::new(g.reference("NEWLINE")))
                 .build(),
         )
+        // BLOCKの優先順位に LIST を追加
         .insert(
             "BLOCK",
             TPOr::builder()
                 .or(g.reference("HEADER"))
                 .or(g.reference("CODE_BLOCK"))
+                .or(g.reference("IMAGE"))
+                .or(g.reference("LIST"))
                 .or(g.reference("PARAGRAPH"))
                 .build()
                 .unwrap(),
+        )
+        // リスト: 箇条書きアイテムの連続
+        .insert_as_node(
+            "LIST",
+            TPOneMany::new(g.reference("LIST_ITEM")),
+            TPTag::Tag("#List"),
+        )
+        // 箇条書きアイテム: - スペース 内容 \n
+        .insert_as_node(
+            "LIST_ITEM",
+            TPSeq::builder()
+                .seq(TPChar::new("- "))
+                .seq(TPNode::new(g.reference("VALUE"), TPTag::Tag("#Text")))
+                .seq(g.reference("NEWLINE"))
+                .build(),
+            TPTag::Tag("#Item"),
+        )
+        .insert_as_node(
+            "IMAGE",
+            TPSeq::builder()
+                .seq(TPChar::new("![]("))
+                .seq(TPNode::new(
+                    TPMany::new(TPSeq::new(
+                        TPNot::new(TPChar::new(")")),
+                        g.reference("ANY_CHAR"),
+                    )),
+                    TPTag::Tag("#Url"),
+                ))
+                .seq(TPChar::new(")"))
+                .seq(g.reference("NEWLINE"))
+                .build(),
+            TPTag::Tag("#Image"),
         )
         .insert_as_node(
             "HEADER",
@@ -311,6 +350,8 @@ fn parse_markdown_with_toypeg(input: &str) -> Result<TPContext> {
                         .or(g.reference("NEWLINE"))
                         .or(TPChar::new("#"))
                         .or(TPChar::new("```"))
+                        .or(TPChar::new("![]("))
+                        .or(TPChar::new("- ")) // リスト開始記号をガード
                         .build()
                         .unwrap(),
                 ))
@@ -337,7 +378,11 @@ fn parse_markdown_with_toypeg(input: &str) -> Result<TPContext> {
         .insert("NEWLINE", TPOr::new(TPChar::new("\r\n"), TPChar::new("\n")))
         .build();
 
-    let context = TPContext::new(input.to_owned());
+    let mut raw = input.to_owned();
+    if !raw.ends_with('\n') {
+        raw.push('\n');
+    }
+    let context = TPContext::new(raw);
     let result = grammar.borrow().get("MARKDOWN").unwrap().matches(context);
 
     match result? {
@@ -384,6 +429,37 @@ fn extract_content(node: &Node, meta: &mut HashMap<String, String>, body: &mut S
 
 fn ast_to_html(node: &Node) -> String {
     match node.tag {
+        TPTag::Tag("#List") => {
+            let mut items_html = String::new();
+            for child_rc in &node.nodes {
+                items_html.push_str(&ast_to_html(&child_rc.borrow()));
+            }
+            format!("<ul>\n{items_html}</ul>\n")
+        }
+        TPTag::Tag("#Item") => {
+            let mut text = String::new();
+            for child_rc in &node.nodes {
+                let child = child_rc.borrow();
+                if child.tag == TPTag::Tag("#Text") {
+                    if let Some(ref token) = child.token {
+                        text = format!("{token}");
+                    }
+                }
+            }
+            format!("  <li>{}</li>\n", text.trim())
+        }
+        TPTag::Tag("#Image") => {
+            let mut url = String::new();
+            for child_rc in &node.nodes {
+                let child = child_rc.borrow();
+                if child.tag == TPTag::Tag("#Url") {
+                    if let Some(ref token) = child.token {
+                        url = format!("{token}");
+                    }
+                }
+            }
+            format!("<img src=\"{url}\" alt=\"\" loading=\"lazy\">\n")
+        }
         TPTag::Tag("#Header") => {
             let mut level = 0;
             let mut text = String::new();
@@ -393,7 +469,6 @@ fn ast_to_html(node: &Node) -> String {
                     level = format!("{}", child.token.as_ref().unwrap()).len();
                 }
                 if child.tag == TPTag::Tag("#Text") {
-                    // 子ノード #Text の token だけを取得
                     text = child
                         .token
                         .as_ref()
@@ -431,7 +506,6 @@ fn ast_to_html(node: &Node) -> String {
             let mut text = String::new();
             for child_rc in &node.nodes {
                 let child = child_rc.borrow();
-                // 子ノード #Line の token だけを順番に結合する
                 if let Some(ref token) = child.token {
                     text.push_str(&format!("{token}"));
                 }
@@ -440,10 +514,11 @@ fn ast_to_html(node: &Node) -> String {
             if clean_text.is_empty() {
                 String::new()
             } else {
-                format!("<p>{}</p>\n", clean_text.replace("\n", "<br>\n"))
+                // ここでインライン要素を置換！
+                let rendered = render_inline(clean_text);
+                format!("<p>{}</p>\n", rendered.replace("\n", "<br>\n"))
             }
         }
-        // コンテナノードは再帰的に子を結合
         _ => {
             let mut html = String::new();
             for child_rc in &node.nodes {
@@ -452,6 +527,97 @@ fn ast_to_html(node: &Node) -> String {
             html
         }
     }
+}
+
+fn render_inline(input: &str) -> String {
+    let mut out = input.to_string();
+
+    // 強調 (太字)
+    // 複雑な入れ子を考慮しないシンプルな置換
+    while let Some(start) = out.find("**") {
+        if let Some(end) = out[start + 2..].find("**") {
+            let actual_end = start + 2 + end;
+            let content = &out[start + 2..actual_end];
+            let new_text = format!("<b>{}</b>", content);
+            out.replace_range(start..actual_end + 2, &new_text);
+        } else {
+            break;
+        }
+    }
+
+    // 取り消し線
+    while let Some(start) = out.find("~~") {
+        if let Some(end) = out[start + 2..].find("~~") {
+            let actual_end = start + 2 + end;
+            let content = &out[start + 2..actual_end];
+            let new_text = format!("<s>{}</s>", content);
+            out.replace_range(start..actual_end + 2, &new_text);
+        } else {
+            break;
+        }
+    }
+
+    // リンク [text](url)
+    while let Some(start) = out.find("[") {
+        if let Some(mid) = out[start..].find("](") {
+            let mid_pos = start + mid;
+            if let Some(end) = out[mid_pos..].find(")") {
+                let end_pos = mid_pos + end;
+                let text = &out[start + 1..mid_pos];
+                let url = &out[mid_pos + 2..end_pos];
+                let new_link = format!("<a href=\"{}\">{}</a>", url, text);
+                out.replace_range(start..end_pos + 1, &new_link);
+                continue;
+            }
+        }
+        break;
+    }
+
+    while let Some(start) = out.find("[^") {
+        if let Some(end) = out[start..].find("]") {
+            let end_pos = start + end;
+            let id = &out[start + 2..end_pos];
+            // HTMLの <sup> タグで上付きリンクにする
+            let link = format!("<sup><a href=\"#fn-{id}\" id=\"fnref-{id}\">[{id}]</a></sup>");
+            out.replace_range(start..end_pos + 1, &link);
+            continue;
+        }
+        break;
+    }
+
+    out
+}
+
+fn process_footnotes(html: &str) -> (String, String) {
+    let mut main_content = String::new();
+    let mut footer_html = String::new();
+    let mut notes = Vec::new();
+
+    for line in html.lines() {
+        if line.starts_with("<p>[^") && line.contains("]: ") {
+            // 脚注の定義行: <p>[^1]: foobar</p> のような形を想定
+            let trimmed = line.trim_start_matches("<p>").trim_end_matches("</p>");
+            if let Some(idx) = trimmed.find("]: ") {
+                let id = &trimmed[2..idx];
+                let content = &trimmed[idx + 3..];
+                notes.push(format!(
+                    "<li id=\"fn-{id}\">{content} <a href=\"#fnref-{id}\">↩</a></li>"
+                ));
+                continue;
+            }
+        }
+        main_content.push_str(line);
+        main_content.push('\n');
+    }
+
+    if !notes.is_empty() {
+        footer_html = format!(
+            "<hr><section class=\"footnotes\"><ol>{}</ol></section>",
+            notes.join("")
+        );
+    }
+
+    (main_content, footer_html)
 }
 
 fn render_simple(template_path: &Path, vars: &HashMap<&str, &str>) -> Result<String> {
