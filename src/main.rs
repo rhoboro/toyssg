@@ -166,8 +166,8 @@ fn render_blog_collection(
         )?;
     }
 
-    if Path::new("contents/static/style.css").exists() {
-        fs::copy("contents/static/style.css", "dist/style.css")?;
+    if Path::new("contents/static").exists() {
+        copy_dir_all("contents/static", "dist")?;
     }
     Ok(())
 }
@@ -190,5 +190,19 @@ fn prepare_dist() -> Result<(), std::io::Error> {
     let _ = fs::remove_dir_all("dist");
     fs::create_dir_all("dist/posts")?;
     fs::create_dir_all("dist/tags")?;
+    Ok(())
+}
+
+fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    fs::create_dir_all(&dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
     Ok(())
 }

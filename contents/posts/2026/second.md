@@ -54,6 +54,6 @@ impl PostEntry {
 
 画像も貼りたい。
 
-![](https://www.rhoboro.com/images/profile/me/01.jpg)
+![](../images/rhoboro.jpg)
 
 [^1]: foobar
