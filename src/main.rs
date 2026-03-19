@@ -129,7 +129,7 @@ fn render_blog_collection(posts: &[PostEntry]) -> Result<()> {
 
     let mut base_vars = HashMap::new();
     base_vars.insert("title", "Articles");
-    base_vars.insert("description", "rhoboro's microblog記事一覧");
+    base_vars.insert("description", "rhoboro's ToySSG記事一覧");
     base_vars.insert("og_type", "website");
     base_vars.insert("rel_path", "./");
     base_vars.insert("content", index_body.as_str());
