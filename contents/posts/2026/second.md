@@ -1,22 +1,30 @@
 ---
 updated_at: 2026-03-15
 published_at: 2026-03-15
-title: 2つめのブログ
+title: 自作SSGの紹介
 tags: rust,blog
 slug: second
-description: 2つ目のブログです。
+description: 自作SSGについて紹介する記事です。
 ---
 
-マイクロブログを作成中...
+自作SSGを作成中...
 
-# マイクロブログとは
+# 自作SSGとは
 
-日常の小さな一言を残していきたい
+自作のPEGパーザ[ToyPEG](https://github.com/rhoboro/toypeg)を使った標準ライブラリのみに依存した軽量SSGです。
+この記事もToyPEGでパースしたマークダウンをHTMLに変換してレンダリングしています。
+
+**強調** や ~~イタリック~~ も使えます。[^1]
+
+普通の箇条書きも使えます。
+
+- foo
+- bar
+- baz
 
 ## コードブロック
 
-こんなコードブロックが使えると嬉しい。
-**強調** や ~~イタリック~~ も使える？[^1]
+コードブロックも使えます。ただし、シンタックスハイライトはJSのライブラリです。
 
 ```rust
 #[derive(Serialize)]
@@ -42,19 +50,11 @@ impl PostEntry {
 }
 ```
 
-- [ ] task1
-- [x] task2
-
-普通の箇条書き
-
-- foo
-- bar
-- baz
-
 ## 画像
 
-画像も貼りたい。
+画像も貼れます。
 
 ![](../images/rhoboro.jpg)
 
-[^1]: foobar
+[^1]: ここは脚注です。
+
