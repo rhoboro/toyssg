@@ -1,4 +1,4 @@
-# microblog-rs
+# toyssg
 
 Rust製の軽量自作SSG
 

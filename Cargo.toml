@@ -1,7 +1,7 @@
 [package]
-name = "microblog-rs"
+name = "toyssg"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-toypeg = { git = "https://github.com/rhoboro/toypeg", version = "0.1.0" }
+toypeg = { path = "./libs/toypeg" }

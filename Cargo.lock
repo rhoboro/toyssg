@@ -3,13 +3,12 @@
 version = 4
 
 [[package]]
-name = "microblog-rs"
+name = "toypeg"
+version = "0.1.0"
+
+[[package]]
+name = "toyssg"
 version = "0.1.0"
 dependencies = [
  "toypeg",
 ]
-
-[[package]]
-name = "toypeg"
-version = "0.1.0"
-source = "git+https://github.com/rhoboro/toypeg#31063b90cba6a0ed2a7eafc877d17462081544d1"
