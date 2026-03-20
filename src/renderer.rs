@@ -3,10 +3,10 @@ use crate::models::Result;
 use std::{collections::HashMap, fs, path::Path};
 use toypeg::{Node, TPTag};
 
+/// {{ key }} を HashMap の値で置換するテンプレートエンジン
 pub struct HtmlRenderer;
 
 impl HtmlRenderer {
-    /// テンプレートエンジン: {{ key }} を HashMap の値で置換する
     pub fn render_template<P: AsRef<Path>>(
         template_path: P,
         vars: &HashMap<&str, &str>,
@@ -19,7 +19,6 @@ impl HtmlRenderer {
         Ok(html)
     }
 
-    /// ASTからHTMLへの変換（メインエントリーポイント）
     pub fn convert_ast_to_html(node: &Node) -> String {
         match node.tag {
             TPTag::Tag(TAG_HEADER) => {
@@ -132,7 +131,6 @@ impl HtmlRenderer {
         }
     }
 
-    /// 本文から脚注定義行を抜き出し、末尾のリストを生成する
     pub fn extract_footnotes(html: &str) -> (String, String) {
         let mut main_content = Vec::new();
         let mut notes = Vec::new();
