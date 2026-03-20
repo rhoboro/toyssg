@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>自作SSGの紹介 — rhoboro's ToySSG</title>
+    <meta name="description" content="自作SSGについて紹介する記事です。">
+
+    <meta property="og:site_name" content="rhoboro's ToySSG">
+    <meta property="og:title" content="自作SSGの紹介">
+    <meta property="og:description" content="自作SSGについて紹介する記事です。">
+    <meta property="og:type" content="article">
+    <meta property="og:image" content="../images/ogp.png">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="自作SSGの紹介">
+
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+</head>
+<body>
+<header>
+    <nav class="site-nav">
+        <div class="site-title">
+            <a href="../index.html">rhoboro's ToySSG</a>
+        </div>
+        <div class="nav-links">
+            <a href="../about.html">About</a>
+        </div>
+    </nav>
+</header>
+
+<main>
+    <article>
+    <h1>自作SSGの紹介</h1>
+    <p><time>2026-03-15</time></p>
+
+    <div class="content">
+        <p>自作SSGを作成中...</p>
+<h1>自作SSGとは</h1>
+<p>自作のPEGパーザ<a href="https://github.com/rhoboro/toypeg">ToyPEG</a>を使った標準ライブラリのみに依存した軽量SSGです。<br>
+この記事もToyPEGでパースしたマークダウンをHTMLに変換してレンダリングしています。</p>
+<p><b>強調</b> や <s>イタリック</s> も使えます。<sup><a href="#fn-1" id="fnref-1">[1]</a></sup></p>
+<p>普通の箇条書きも使えます。</p>
+<ul>
+  <li>foo</li>
+  <li>bar</li>
+  <li>baz</li>
+</ul>
+<h2>コードブロック</h2>
+<p>コードブロックも使えます。ただし、シンタックスハイライトはJSのライブラリです。</p>
+<pre><code class="language-rust">#[derive(Serialize)]
+struct PostContext<'a> {
+    title: &'a str,
+    published_at: &'a str,
+    tags: &'a str,
+    content: String, // 変換後のHTML
+    rel_path: &'a str,
+}
+
+impl PostEntry {
+    // 自身の参照と、外部から与えられるHTML・相対パスを組み合わせて Context 用構造体を作る
+    fn to_context<'a>(&'a self, html_content: String, rel_path: &'a str) -> PostContext<'a> {
+        PostContext {
+            title: &self.meta.title,
+            published_at: &self.meta.published_at,
+            tags: &self.meta.tags,
+            content: html_content,
+            rel_path,
+        }
+    }
+}
+</code></pre>
+<h2>画像</h2>
+<p>画像も貼れます。</p>
+<img src="../images/rhoboro.jpg" alt="" loading="lazy"><hr><section class="footnotes"><ol><li id="fn-1">ここは脚注です。 <a href="#fnref-1">↩</a></li></ol></section>
+    </div>
+
+    <div class="tags">
+        Tags: <a href="../tags/rust.html">#rust</a> <a href="../tags/blog.html">#blog</a> 
+    </div>
+</article>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</main>
+
+<footer>
+    <p><small>&copy; 2026 rhoboro's <a href="https://github.com/rhoboro/toyssg">ToySSG</a></small></p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,173 @@
+/* --- Variables --- */
+:root {
+    --bg: #ffffff;
+    --text: #1a1a1a;
+    --muted: #888888;
+    --accent: #f0f0f0;
+    --nav-opacity: 0.5;
+    --nav-title-opacity: 0.8;
+}
+
+/* --- Base --- */
+body {
+    max-width: 600px;
+    margin: 60px auto;
+    padding: 0 20px;
+    line-height: 1.8;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif;
+    color: var(--text);
+    background-color: var(--bg);
+}
+
+/* --- Navigation --- */
+.site-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 40px;
+}
+
+.site-nav a {
+    color: var(--text);
+    text-decoration: none;
+    transition: opacity 0.3s ease;
+    opacity: var(--nav-opacity);
+}
+
+.site-title a {
+    font-size: 0.9rem;
+    font-weight: 400;
+    opacity: var(--nav-title-opacity);
+    letter-spacing: -0.01em;
+}
+
+.nav-links {
+    display: flex;
+    gap: 20px;
+}
+
+.nav-links a {
+    font-size: 0.8rem;
+}
+
+.site-nav a:hover {
+    opacity: 1;
+}
+
+/* --- Headlines --- */
+h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-top: 0;
+    margin-bottom: 30px;
+}
+
+.content h1 {
+    font-size: 1.4rem;
+    margin-top: 2rem;
+}
+
+.content h2 {
+    font-size: 1.2rem;
+    margin-top: 1.8rem;
+}
+
+/* --- Post List (Index) --- */
+.post-list {
+    list-style: none;
+    padding: 0;
+}
+
+.post-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 12px;
+}
+
+.post-list a {
+    color: var(--text);
+    text-decoration: none;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.post-list a:hover {
+    opacity: 1;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+    text-decoration-thickness: 1px;
+}
+
+.post-list span {
+    font-size: 0.8rem;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    color: var(--muted);
+    opacity: 0.6;
+    order: 2;
+}
+
+/* --- Content Area --- */
+.content {
+    margin-bottom: 100px;
+}
+
+.content p {
+    margin-bottom: 1.5rem;
+}
+
+.content img {
+    max-width: 100%;
+    height: auto;
+    margin: 2rem 0;
+}
+
+/* --- Components --- */
+pre {
+    background: var(--accent);
+    padding: 1.2rem;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    margin: 2rem 0;
+    border-radius: 4px;
+}
+
+.tags {
+    margin-top: 40px;
+    font-size: 0.8rem;
+}
+
+.tags a {
+    color: var(--muted);
+    margin-right: 10px;
+    text-decoration: none;
+}
+
+.tags a:hover {
+    color: var(--text);
+}
+
+/* --- Footer --- */
+footer {
+    margin-top: 100px;
+    padding-bottom: 40px;
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-align: center;
+}
+
+/* --- Mobile --- */
+@media (max-width: 480px) {
+    body {
+        margin-top: 40px;
+    }
+
+    .site-nav {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .nav-links {
+        gap: 15px;
+    }
+}
